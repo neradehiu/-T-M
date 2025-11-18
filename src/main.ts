@@ -24,9 +24,20 @@ async function bootstrap() {
     prefix: '/uploads/',
   });
 
-  // 👇 cho FE ở 5173 gọi sang
+  const allowedOrigins = [
+    'http://localhost:5173',
+    'https://t-m-fe.onrender.com',
+  ];
+
   app.enableCors({
-    origin: 'http://localhost:5173',
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
   });
 
   await app.listen(process.env.PORT || 3000);
