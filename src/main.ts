@@ -15,14 +15,18 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
       transform: true,
       transformOptions: {
-        enableImplicitConversion: true, // form-data "100000" -> number
+        enableImplicitConversion: true,
       },
     }),
   );
 
-  // serve static /uploads
   app.useStaticAssets(join(__dirname, '..', 'uploads'), {
     prefix: '/uploads/',
+  });
+
+  // 👇 cho FE ở 5173 gọi sang
+  app.enableCors({
+    origin: 'http://localhost:5173',
   });
 
   await app.listen(process.env.PORT || 3000);
