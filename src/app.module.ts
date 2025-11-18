@@ -6,12 +6,14 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { ProductsModule } from './products/products.module';
 import { CartModule } from './cart/cart.module';
+import { OrdersModule } from './orders/orders.module';
+
 import { User } from './users/user.entity';
 import { Product } from './products/product.entity';
 import { CartItem } from './cart/cart-item.entity';
 import { Order } from './orders/entities/order.entity';
 import { OrderItem } from './orders/entities/order-item.entity';
-import { OrdersModule } from './orders/orders.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -26,8 +28,11 @@ import { OrdersModule } from './orders/orders.module';
         username: config.get<string>('DB_USERNAME'),
         password: config.get<string>('DB_PASSWORD'),
         database: config.get<string>('DB_NAME'),
-        entities: [User, Product, CartItem ,Order, OrderItem],
-        synchronize: true, // demo/học tập, production nên dùng migration
+        entities: [User, Product, CartItem, Order, OrderItem],
+        synchronize: true,
+        extra: {
+          ssl: { rejectUnauthorized: false },
+        },
       }),
     }),
     AuthModule,
