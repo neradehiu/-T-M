@@ -57,4 +57,11 @@ export class OrdersController {
   ) {
     return this.ordersService.updateStatus(+id, dto);
   }
-}
+
+  @Get(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  getOrderDetail(@Param('id') id: string) {
+    return this.ordersService.findOne(+id);
+  }
+}   

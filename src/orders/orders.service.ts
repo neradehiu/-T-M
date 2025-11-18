@@ -15,6 +15,7 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 
 import { CartItem } from '../cart/cart-item.entity';
 import { User } from '../users/user.entity';
+import { Product } from '../products/product.entity';
 
 @Injectable()
 export class OrdersService {
@@ -27,6 +28,8 @@ export class OrdersService {
     private readonly cartRepo: Repository<CartItem>,
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
+    @InjectRepository(Product)
+    private readonly productsRepo: Repository<Product>,
   ) {}
 
   private generateOrderCode(): string {
@@ -57,12 +60,23 @@ export class OrdersService {
       );
     }
 
-    // Tính tổng tiền
+    // 1) Kiểm tra tồn kho từng sản phẩm
+    for (const item of cartItems) {
+      const stock = Number(item.product.stock);
+      if (item.quantity > stock) {
+        throw new BadRequestException(
+          `Sản phẩm "${item.product.name}" chỉ còn ${stock} sản phẩm trong kho. Vui lòng chỉnh lại số lượng.`,
+        );
+      }
+    }
+
+    // 2) Tính tổng tiền
     const totalAmount = cartItems.reduce(
       (sum, item) => sum + item.quantity * Number(item.product.price),
       0,
     );
 
+    // 3) Tạo order
     const order = this.ordersRepo.create({
       code: this.generateOrderCode(),
       user,
@@ -75,6 +89,7 @@ export class OrdersService {
 
     const savedOrder = await this.ordersRepo.save(order);
 
+    // 4) Tạo order_items
     const orderItems: OrderItem[] = [];
 
     for (const item of cartItems) {
@@ -91,10 +106,23 @@ export class OrdersService {
 
     await this.orderItemsRepo.save(orderItems);
 
-    // Xoá các cartItem đã thanh toán
+    // 5) Trừ tồn kho sản phẩm
+    for (const item of cartItems) {
+      const product = await this.productsRepo.findOne({
+        where: { id: item.product.id },
+      });
+      if (!product) continue;
+
+      const stock = Number(product.stock);
+      const newStock = stock - item.quantity;
+      product.stock = newStock < 0 ? 0 : newStock;
+      await this.productsRepo.save(product);
+    }
+
+    // 6) Xoá các cartItem đã thanh toán
     await this.cartRepo.remove(cartItems);
 
-    // load lại order với items
+    // 7) Load lại order đầy đủ
     const fullOrder = await this.ordersRepo.findOne({
       where: { id: savedOrder.id },
       relations: ['items', 'items.product', 'user'],
@@ -126,10 +154,23 @@ export class OrdersService {
     return order;
   }
 
+  // admin xem chi tiết 1 đơn bất kỳ
+  async findOne(orderId: number) {
+    const order = await this.ordersRepo.findOne({
+      where: { id: orderId },
+      relations: ['items', 'items.product', 'user'],
+    });
+
+    if (!order) throw new NotFoundException('Đơn hàng không tồn tại');
+
+    return order;
+  }
+
   // admin xem tất cả đơn
   async findAll() {
     return this.ordersRepo.find({
       order: { createdAt: 'DESC' },
+      relations: ['user'],
     });
   }
 

@@ -1,11 +1,11 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
-  BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-
 import { CartItem } from './cart-item.entity';
 import { Product } from '../products/product.entity';
 import { User } from '../users/user.entity';
@@ -18,30 +18,25 @@ export class CartService {
     @InjectRepository(CartItem)
     private readonly cartRepo: Repository<CartItem>,
     @InjectRepository(Product)
-    private readonly productRepo: Repository<Product>,
+    private readonly productsRepo: Repository<Product>,
     @InjectRepository(User)
-    private readonly userRepo: Repository<User>,
+    private readonly usersRepo: Repository<User>,
   ) {}
 
-  // Lấy giỏ hàng của user đang đăng nhập
-  async getCart(userId: number) {
+  async getMyCart(userId: number) {
     const items = await this.cartRepo.find({
       where: { user: { id: userId } },
-      relations: ['product'],
-      order: { createdAt: 'DESC' },
+      relations: ['product', 'user'],
     });
 
-    const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+    const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
     const totalPrice = items.reduce(
-      (sum, item) => sum + item.quantity * Number(item.product.price),
+      (sum, i) => sum + i.quantity * Number(i.product.price),
       0,
     );
     const selectedTotalPrice = items
       .filter((i) => i.selected)
-      .reduce(
-        (sum, item) => sum + item.quantity * Number(item.product.price),
-        0,
-      );
+      .reduce((sum, i) => sum + i.quantity * Number(i.product.price), 0);
 
     return {
       items,
@@ -51,90 +46,91 @@ export class CartService {
     };
   }
 
-  // Thêm sản phẩm vào giỏ
   async addToCart(userId: number, dto: AddToCartDto) {
-    const user = await this.userRepo.findOne({ where: { id: userId } });
-    if (!user) {
-      throw new NotFoundException('User không tồn tại');
-    }
+    const user = await this.usersRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User không tồn tại');
 
-    const product = await this.productRepo.findOne({
+    const product = await this.productsRepo.findOne({
       where: { id: dto.productId },
     });
-    if (!product) {
-      throw new NotFoundException('Sản phẩm không tồn tại');
+    if (!product) throw new NotFoundException('Sản phẩm không tồn tại');
+
+    if (product.stock <= 0) {
+      throw new BadRequestException('Sản phẩm đã hết hàng');
     }
 
-    // (OPTIONAL) kiểm tra tồn kho
-    if (dto.quantity <= 0) {
-      throw new BadRequestException('Số lượng phải lớn hơn 0');
-    }
-
-    // Nếu đã có cùng product trong giỏ → tăng thêm quantity
-    let cartItem = await this.cartRepo.findOne({
-      where: {
-        user: { id: userId },
-        product: { id: dto.productId },
-      },
-      relations: ['product', 'user'],
+    const existing = await this.cartRepo.findOne({
+      where: { user: { id: userId }, product: { id: dto.productId } },
+      relations: ['user', 'product'],
     });
 
-    if (cartItem) {
-      cartItem.quantity += dto.quantity;
-    } else {
-      cartItem = this.cartRepo.create({
-        user,
-        product,
-        quantity: dto.quantity,
-        selected: true, // mặc định thêm vào là được chọn
-      });
+    const currentQty = existing?.quantity ?? 0;
+    const newQty = currentQty + dto.quantity;
+
+    if (newQty > product.stock) {
+      throw new BadRequestException(
+        `Số lượng vượt quá tồn kho. Hiện còn ${product.stock} sản phẩm.`,
+      );
     }
 
-    const saved = await this.cartRepo.save(cartItem);
-    return saved;
+    if (existing) {
+      existing.quantity = newQty;
+      existing.selected = true;
+      return this.cartRepo.save(existing);
+    }
+
+    const item = this.cartRepo.create({
+      user,
+      product,
+      quantity: dto.quantity,
+      selected: true,
+    });
+    return this.cartRepo.save(item);
   }
 
-  // Cập nhật số lượng / selected
-  async updateItem(
+  async updateCartItem(
     userId: number,
-    cartItemId: number,
+    itemId: number,
     dto: UpdateCartItemDto,
   ) {
-    const cartItem = await this.cartRepo.findOne({
-      where: { id: cartItemId, user: { id: userId } },
-      relations: ['product'],
+    const item = await this.cartRepo.findOne({
+      where: { id: itemId },
+      relations: ['user', 'product'],
     });
-
-    if (!cartItem) {
-      throw new NotFoundException('Sản phẩm trong giỏ không tồn tại');
+    if (!item) throw new NotFoundException('Item không tồn tại');
+    if (item.user.id !== userId) {
+      throw new ForbiddenException('Không thể sửa giỏ hàng của người khác');
     }
 
     if (dto.quantity !== undefined) {
-      if (dto.quantity < 1) {
-        throw new BadRequestException('Số lượng phải >= 1');
+      if (dto.quantity <= 0) {
+        throw new BadRequestException('Số lượng phải lớn hơn 0');
       }
-      cartItem.quantity = dto.quantity;
+      if (dto.quantity > item.product.stock) {
+        throw new BadRequestException(
+          `Số lượng vượt quá tồn kho. Hiện còn ${item.product.stock} sản phẩm.`,
+        );
+      }
+      item.quantity = dto.quantity;
     }
 
     if (dto.selected !== undefined) {
-      cartItem.selected = dto.selected;
+      item.selected = dto.selected;
     }
 
-    const saved = await this.cartRepo.save(cartItem);
-    return saved;
+    return this.cartRepo.save(item);
   }
 
-  // Xoá 1 item khỏi giỏ
-  async removeItem(userId: number, cartItemId: number) {
-    const cartItem = await this.cartRepo.findOne({
-      where: { id: cartItemId, user: { id: userId } },
+  async removeCartItem(userId: number, itemId: number) {
+    const item = await this.cartRepo.findOne({
+      where: { id: itemId },
+      relations: ['user'],
     });
-
-    if (!cartItem) {
-      throw new NotFoundException('Sản phẩm trong giỏ không tồn tại');
+    if (!item) throw new NotFoundException('Item không tồn tại');
+    if (item.user.id !== userId) {
+      throw new ForbiddenException('Không thể xoá giỏ hàng của người khác');
     }
-
-    await this.cartRepo.remove(cartItem);
+    await this.cartRepo.remove(item);
     return { success: true };
   }
 }

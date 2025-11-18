@@ -22,7 +22,7 @@ export class CartController {
   // GET /api/cart
   @Get()
   getMyCart(@CurrentUser() user: any) {
-    return this.cartService.getCart(user.id);
+    return this.cartService.getMyCart(user.id);
   }
 
   // POST /api/cart
@@ -38,12 +38,12 @@ export class CartController {
     @Param('id') id: string,
     @Body() dto: UpdateCartItemDto,
   ) {
-    return this.cartService.updateItem(user.id, +id, dto);
+    return this.cartService.updateCartItem(user.id, +id, dto);
   }
 
   // DELETE /api/cart/:id
   @Delete(':id')
   removeCartItem(@CurrentUser() user: any, @Param('id') id: string) {
-    return this.cartService.removeItem(user.id, +id);
+    return this.cartService.removeCartItem(user.id, +id);
   }
 }
