@@ -8,7 +8,7 @@ export class CreateOrderDto {
   @IsNotEmpty({ message: 'Số điện thoại không được để trống' })
   @Length(9, 15, { message: 'Số điện thoại phải có từ 9 đến 15 ký tự.' })
   @Matches(/^\+?\d+$/, {
-    message: 'Số điện thoại chỉ được chứa chữ số và có thể có dấu "+" ở đầu.',
+    message: 'Số điện thoại không hợp lệ',
   })
   shippingPhone: string;
 

@@ -29,22 +29,39 @@ export class CartService {
       relations: ['product', 'user'],
     });
 
-    const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
-    const totalPrice = items.reduce(
+    // Lọc ra các item có product còn active
+    const activeItems = items.filter((i) => {
+      const p = i.product as any;
+      // product tồn tại và không bị tắt
+      return p && p.isActive !== false;
+    });
+
+    // (tuỳ chọn) dọn luôn các item có product đã tắt khỏi DB
+    const inactiveItems = items.filter((i) => {
+      const p = i.product as any;
+      return !p || p.isActive === false;
+    });
+    if (inactiveItems.length > 0) {
+      await this.cartRepo.remove(inactiveItems);
+    }
+
+    const totalItems = activeItems.reduce((sum, i) => sum + i.quantity, 0);
+    const totalPrice = activeItems.reduce(
       (sum, i) => sum + i.quantity * Number(i.product.price),
       0,
     );
-    const selectedTotalPrice = items
+    const selectedTotalPrice = activeItems
       .filter((i) => i.selected)
       .reduce((sum, i) => sum + i.quantity * Number(i.product.price), 0);
 
     return {
-      items,
+      items: activeItems,
       totalItems,
       totalPrice,
       selectedTotalPrice,
     };
   }
+
 
   async addToCart(userId: number, dto: AddToCartDto) {
     const user = await this.usersRepo.findOne({ where: { id: userId } });
@@ -54,6 +71,10 @@ export class CartService {
       where: { id: dto.productId },
     });
     if (!product) throw new NotFoundException('Sản phẩm không tồn tại');
+
+    if ((product as any).isActive === false) {
+      throw new BadRequestException('Sản phẩm hiện đã ngừng kinh doanh');
+    }
 
     if (product.stock <= 0) {
       throw new BadRequestException('Sản phẩm đã hết hàng');
@@ -100,6 +121,11 @@ export class CartService {
     if (!item) throw new NotFoundException('Item không tồn tại');
     if (item.user.id !== userId) {
       throw new ForbiddenException('Không thể sửa giỏ hàng của người khác');
+    } 
+    if ((item.product as any).isActive === false) {
+      throw new BadRequestException(
+        'Sản phẩm trong giỏ hàng này đã ngừng kinh doanh. Vui lòng xoá khỏi giỏ.',
+      );
     }
 
     if (dto.quantity !== undefined) {

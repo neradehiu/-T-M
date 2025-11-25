@@ -30,9 +30,13 @@ import { OrderItem } from './orders/entities/order-item.entity';
         database: config.get<string>('DB_NAME'),
         entities: [User, Product, CartItem, Order, OrderItem],
         synchronize: true,
-        extra: {
-          ssl: { rejectUnauthorized: false },
-        },
+
+        // QUAN TRỌNG: tắt SSL vì server không hỗ trợ
+        ssl: false,
+        // ❌ xoá block extra.ssl đi
+        // extra: {
+        //   ssl: { rejectUnauthorized: false },
+        // },
       }),
     }),
     AuthModule,

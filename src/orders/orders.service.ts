@@ -60,12 +60,20 @@ export class OrdersService {
       );
     }
 
-    // 1) Kiểm tra tồn kho từng sản phẩm
-    for (const item of cartItems) {
-      const stock = Number(item.product.stock);
+for (const item of cartItems) {
+  const product = item.product;
+
+  // ❌ Nếu sản phẩm đã bị tắt (isActive = false) → không cho checkout
+      if (product.isActive === false) {
+        throw new BadRequestException(
+          `Sản phẩm "${product.name}" hiện đã ngừng kinh doanh. Vui lòng xoá khỏi giỏ hàng.`,
+        );
+      }
+
+      const stock = Number(product.stock);
       if (item.quantity > stock) {
         throw new BadRequestException(
-          `Sản phẩm "${item.product.name}" chỉ còn ${stock} sản phẩm trong kho. Vui lòng chỉnh lại số lượng.`,
+          `Sản phẩm "${product.name}" chỉ còn ${stock} sản phẩm trong kho. Vui lòng chỉnh lại số lượng.`,
         );
       }
     }

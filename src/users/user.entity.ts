@@ -30,6 +30,10 @@ export class User {
   })
   role: UserRole;
 
+  // 👇 NEW: tài khoản hệ thống (admin gốc)
+  @Column({ default: false })
+  isSystem: boolean;
+
   @OneToMany(() => CartItem, (item) => item.user)
   cartItems: CartItem[];
 

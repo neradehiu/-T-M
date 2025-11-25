@@ -28,6 +28,10 @@ export class Product {
   @Column({ name: 'image_url' })
   imageUrl: string;
 
+  // 👇 NEW: cột soft delete
+  @Column({ default: true })
+  isActive: boolean;
+
   @OneToMany(() => CartItem, (item) => item.product)
   cartItems: CartItem[];
 

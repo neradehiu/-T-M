@@ -18,23 +18,28 @@ export class ProductsService {
       const keyword = `%${search.trim()}%`;
       return this.productsRepo.find({
         where: [
-          { name: ILike(keyword) },
-          { description: ILike(keyword) },
+          { name: ILike(keyword), isActive: true },
+          { description: ILike(keyword), isActive: true },
         ],
         order: { createdAt: 'DESC' },
       });
     }
 
     return this.productsRepo.find({
+      where: { isActive: true },
       order: { createdAt: 'DESC' },
     });
   }
 
+
   async findOne(id: number) {
-    const product = await this.productsRepo.findOne({ where: { id } });
+    const product = await this.productsRepo.findOne({
+      where: { id, isActive: true },
+    });
     if (!product) throw new NotFoundException('Sản phẩm không tồn tại');
     return product;
   }
+
 
   async create(dto: CreateProductDto, imageUrl: string) {
     const product = this.productsRepo.create({
@@ -43,10 +48,12 @@ export class ProductsService {
       price: dto.price,
       stock: dto.stock ?? 0,
       imageUrl,
+      isActive: true, // 👈 NEW
     });
 
     return this.productsRepo.save(product);
   }
+
 
   async update(id: number, dto: UpdateProductDto, imageUrl?: string) {
     const product = await this.productsRepo.findOne({ where: { id } });
@@ -64,6 +71,12 @@ export class ProductsService {
   async remove(id: number) {
     const product = await this.productsRepo.findOne({ where: { id } });
     if (!product) throw new NotFoundException('Sản phẩm không tồn tại');
+
+    // 👇 soft delete
+    product.isActive = false;
+    await this.productsRepo.save(product);
+
     return { success: true };
   }
+
 }
